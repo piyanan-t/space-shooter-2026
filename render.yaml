@@ -1,0 +1,20 @@
+# render.yaml
+services:
+  - type: web
+    name: space-shooter
+    env: node
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true   # Render สร้างให้อัตโนมัติ
+      - key: DB_HOST
+        sync: false           # กรอกเองใน dashboard
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_NAME
+        sync: false

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Space Shooter ☁️</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ════════════════════════════════════
+       AUTH SCREEN
+  ═══════════════════════════════════════ -->
+  <div id="auth-screen" class="screen active">
+    <div class="logo">
+      <h1>⚡ Space Shooter</h1>
+      <p>Cloud Edition · v1.0</p>
+    </div>
+
+    <div class="auth-card">
+      <div class="auth-tabs">
+        <button class="auth-tab active" onclick="switchTab('login')">เข้าสู่ระบบ</button>
+        <button class="auth-tab"       onclick="switchTab('register')">สมัครสมาชิก</button>
+      </div>
+
+      <!-- Login form -->
+      <div id="tab-login">
+        <div class="form-group">
+          <label>Username</label>
+          <input id="login-user" type="text" placeholder="กรอก username" autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input id="login-pass" type="password" placeholder="กรอก password" autocomplete="current-password">
+        </div>
+        <button class="btn btn-primary" onclick="doLogin()">▶ เข้าสู่ระบบ</button>
+      </div>
+
+      <!-- Register form -->
+      <div id="tab-register" style="display:none">
+        <div class="form-group">
+          <label>Username (3-30 ตัวอักษร)</label>
+          <input id="reg-user" type="text" placeholder="เลือก username" autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label>Password (อย่างน้อย 6 ตัว)</label>
+          <input id="reg-pass" type="password" placeholder="ตั้ง password" autocomplete="new-password">
+        </div>
+        <button class="btn btn-primary" onclick="doRegister()">✦ สมัครสมาชิก</button>
+      </div>
+
+      <div id="auth-msg" class="auth-msg"></div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       GAME SCREEN
+  ═══════════════════════════════════════ -->
+  <div id="game-screen" class="screen">
+
+    <!-- Sidebar -->
+    <aside class="game-sidebar">
+      <div class="sidebar-player">
+        <div class="player-avatar" id="player-avatar">?</div>
+        <div class="player-name" id="player-name">—</div>
+        <div class="player-best" id="player-best">Best: 0</div>
+      </div>
+
+      <div class="sidebar-section">
+        <h3>Stats</h3>
+        <div class="stat-row"><span>Score</span><span id="sb-score">0</span></div>
+        <div class="stat-row"><span>Level</span><span id="sb-level">1</span></div>
+        <div class="stat-row"><span>Lives</span><span id="sb-lives">❤❤❤</span></div>
+      </div>
+
+      <div class="sidebar-section">
+        <h3>🏆 Leaderboard</h3>
+        <ul class="lb-list" id="lb-list">
+          <li class="lb-item"><span style="color:var(--muted);font-size:12px">กำลังโหลด...</span></li>
+        </ul>
+      </div>
+
+      <div class="sidebar-btns">
+        <button class="btn btn-ghost" onclick="toggleGame()" id="pause-btn">⏸ Pause</button>
+        <button class="btn btn-ghost" onclick="doLogout()">↩ ออกจากระบบ</button>
+      </div>
+    </aside>
+
+    <!-- Game canvas area -->
+    <main class="game-main">
+      <canvas id="gameCanvas"></canvas>
+
+      <!-- HUD -->
+      <div id="hud">
+        <div>
+          <div class="hud-score" id="hud-score">0</div>
+          <div class="hud-sub">SCORE</div>
+        </div>
+        <div style="text-align:center">
+          <div class="hud-lives" id="hud-lives">❤❤❤</div>
+        </div>
+        <div>
+          <div class="hud-level" id="hud-level">LV 1</div>
+        </div>
+      </div>
+
+      <!-- Start overlay -->
+      <div class="overlay" id="overlay-start">
+        <div class="overlay-card">
+          <h2>🚀 พร้อมสู้!</h2>
+          <p style="margin:16px 0">ใช้ ← → เพื่อเลื่อน · SPACE ยิง<br>ทำลาย UFO ให้มากที่สุด!</p>
+          <div class="overlay-btns">
+            <button class="btn btn-primary" onclick="startGame()">▶ เริ่มเกม</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Game Over overlay -->
+      <div class="overlay" id="overlay-gameover" style="display:none">
+        <div class="overlay-card">
+          <h2 style="color:var(--danger)">☠ GAME OVER</h2>
+          <div class="big-score" id="go-score">0</div>
+          <p id="go-rank">กำลังบันทึก score...</p>
+          <div class="overlay-btns">
+            <button class="btn btn-primary" onclick="startGame()">🔄 เล่นใหม่</button>
+            <button class="btn btn-ghost"   onclick="showLeaderboard()">🏆 Leaderboard</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pause overlay -->
+      <div class="overlay" id="overlay-pause" style="display:none">
+        <div class="overlay-card">
+          <h2>⏸ PAUSED</h2>
+          <p style="margin:16px 0">กด SPACE หรือกดปุ่มด้านล่างเพื่อเล่นต่อ</p>
+          <button class="btn btn-primary" onclick="resumeGame()">▶ เล่นต่อ</button>
+        </div>
+      </div>
+
+      <div class="controls-hint">← → เลื่อน · SPACE ยิง · P หยุด</div>
+    </main>
+  </div>
+
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>
