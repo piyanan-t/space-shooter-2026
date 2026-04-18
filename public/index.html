@@ -2,14 +2,16 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Space Shooter ☁️</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div id="app">
 
-  <!-- ════════════════════════════════════
+  <!-- ══════════════════════════════════
        AUTH SCREEN
   ═══════════════════════════════════════ -->
   <div id="auth-screen" class="screen active">
@@ -24,7 +26,6 @@
         <button class="auth-tab"       onclick="switchTab('register')">สมัครสมาชิก</button>
       </div>
 
-      <!-- Login form -->
       <div id="tab-login">
         <div class="form-group">
           <label>Username</label>
@@ -37,7 +38,6 @@
         <button class="btn btn-primary" onclick="doLogin()">▶ เข้าสู่ระบบ</button>
       </div>
 
-      <!-- Register form -->
       <div id="tab-register" style="display:none">
         <div class="form-group">
           <label>Username (3-30 ตัวอักษร)</label>
@@ -54,12 +54,39 @@
     </div>
   </div>
 
-  <!-- ════════════════════════════════════
+  <!-- ══════════════════════════════════
        GAME SCREEN
   ═══════════════════════════════════════ -->
   <div id="game-screen" class="screen">
 
-    <!-- Sidebar -->
+    <!-- ── MOBILE TOP BAR (leaderboard + stats) ── -->
+    <div class="mobile-topbar" id="mobile-topbar">
+      <div class="mobile-topbar-left">
+        <div class="mobile-avatar" id="mob-avatar">?</div>
+        <div>
+          <div class="mobile-playername" id="mob-name">—</div>
+          <div class="mobile-best" id="mob-best">Best: 0</div>
+        </div>
+      </div>
+      <div class="mobile-topbar-right">
+        <button class="mob-btn" onclick="toggleMobileLB()">🏆</button>
+        <button class="mob-btn" onclick="toggleGame()" id="mob-pause-btn">⏸</button>
+        <button class="mob-btn" onclick="doLogout()">↩</button>
+      </div>
+    </div>
+
+    <!-- ── MOBILE LEADERBOARD DRAWER ── -->
+    <div class="mobile-lb-drawer" id="mobile-lb-drawer">
+      <div class="mobile-lb-header">
+        <span>🏆 Leaderboard</span>
+        <button onclick="toggleMobileLB()" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;">✕</button>
+      </div>
+      <ul class="lb-list" id="mob-lb-list">
+        <li class="lb-item"><span style="color:var(--muted);font-size:12px">กำลังโหลด...</span></li>
+      </ul>
+    </div>
+
+    <!-- ── DESKTOP SIDEBAR ── -->
     <aside class="game-sidebar">
       <div class="sidebar-player">
         <div class="player-avatar" id="player-avatar">?</div>
@@ -87,7 +114,7 @@
       </div>
     </aside>
 
-    <!-- Game canvas area -->
+    <!-- ── GAME CANVAS AREA ── -->
     <main class="game-main">
       <canvas id="gameCanvas"></canvas>
 
@@ -109,7 +136,8 @@
       <div class="overlay" id="overlay-start">
         <div class="overlay-card">
           <h2>🚀 พร้อมสู้!</h2>
-          <p style="margin:16px 0">ใช้ ← → เพื่อเลื่อน · SPACE ยิง<br>ทำลาย UFO ให้มากที่สุด!</p>
+          <p class="overlay-hint desktop-hint">ใช้ ← → เพื่อเลื่อน · SPACE ยิง<br>ทำลาย UFO ให้มากที่สุด!</p>
+          <p class="overlay-hint mobile-hint">กดปุ่มซ้าย/ขวาเพื่อเลื่อน<br>กดปุ่ม FIRE เพื่อยิง!</p>
           <div class="overlay-btns">
             <button class="btn btn-primary" onclick="startGame()">▶ เริ่มเกม</button>
           </div>
@@ -138,11 +166,43 @@
         </div>
       </div>
 
-      <div class="controls-hint">← → เลื่อน · SPACE ยิง · P หยุด</div>
+      <div class="controls-hint desktop-only">← → เลื่อน · SPACE ยิง · P หยุด</div>
     </main>
-  </div>
 
-</div>
+    <!-- ── MOBILE JOYSTICK CONTROLS ── -->
+    <div class="mobile-controls" id="mobile-controls">
+      <div class="mob-controls-row">
+        <button class="mob-ctrl-btn mob-left"
+          id="btn-left"
+          ontouchstart="mobileKey('left', true)"
+          ontouchend="mobileKey('left', false)"
+          onmousedown="mobileKey('left', true)"
+          onmouseup="mobileKey('left', false)">
+          ◀
+        </button>
+
+        <button class="mob-ctrl-btn mob-fire"
+          id="btn-fire"
+          ontouchstart="mobileFire(true)"
+          ontouchend="mobileFire(false)"
+          onmousedown="mobileFire(true)"
+          onmouseup="mobileFire(false)">
+          FIRE
+        </button>
+
+        <button class="mob-ctrl-btn mob-right"
+          id="btn-right"
+          ontouchstart="mobileKey('right', true)"
+          ontouchend="mobileKey('right', false)"
+          onmousedown="mobileKey('right', true)"
+          onmouseup="mobileKey('right', false)">
+          ▶
+        </button>
+      </div>
+    </div>
+
+  </div><!-- end #game-screen -->
+</div><!-- end #app -->
 
 <script src="game.js"></script>
 </body>

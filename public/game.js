@@ -77,8 +77,13 @@ function doLogout() {
 }
 
 function onLoginSuccess() {
-  document.getElementById('player-name').textContent    = currentUser;
-  document.getElementById('player-avatar').textContent  = currentUser[0].toUpperCase();
+  const initial = currentUser[0].toUpperCase();
+  // Desktop sidebar
+  document.getElementById('player-name').textContent   = currentUser;
+  document.getElementById('player-avatar').textContent = initial;
+  // Mobile topbar
+  document.getElementById('mob-name').textContent   = currentUser;
+  document.getElementById('mob-avatar').textContent = initial;
   showScreen('game-screen');
   initCanvas();
   loadLeaderboard();
@@ -110,28 +115,36 @@ function showScreen(id) {
 async function loadMyBest() {
   const scores = await API.get('/scores/me');
   if (scores.length > 0) {
-    document.getElementById('player-best').textContent = 'Best: ' + scores[0].score.toLocaleString();
+    const bestText = 'Best: ' + scores[0].score.toLocaleString();
+    document.getElementById('player-best').textContent = bestText;
+    document.getElementById('mob-best').textContent    = bestText;
   }
 }
 
 async function loadLeaderboard() {
   const data = await API.get('/leaderboard?limit=10');
-  const ul = document.getElementById('lb-list');
   const medals = ['gold','silver','bronze'];
 
-  if (!data.length) {
-    ul.innerHTML = '<li class="lb-item"><span style="color:var(--muted);font-size:11px">ยังไม่มีข้อมูล</span></li>';
-    return;
-  }
+  const html = !data.length
+    ? '<li class="lb-item"><span style="color:var(--muted);font-size:11px">ยังไม่มีข้อมูล</span></li>'
+    : data.map((row, i) => `
+        <li class="lb-item">
+          <span class="lb-rank ${medals[i] || ''}">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i+1)+'.'}</span>
+          <span class="lb-name" title="${row.username}">${row.username}</span>
+          <span class="lb-score">${Number(row.best_score).toLocaleString()}</span>
+        </li>`).join('');
 
-  ul.innerHTML = data.map((row, i) => `
-    <li class="lb-item">
-      <span class="lb-rank ${medals[i] || ''}">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i+1)+'.'}</span>
-      <span class="lb-name" title="${row.username}">${row.username}</span>
-      <span class="lb-score">${Number(row.best_score).toLocaleString()}</span>
-    </li>
-  `).join('');
+  // Populate both desktop sidebar and mobile drawer
+  const desktopUl = document.getElementById('lb-list');
+  const mobileUl  = document.getElementById('mob-lb-list');
+  if (desktopUl) desktopUl.innerHTML = html;
+  if (mobileUl)  mobileUl.innerHTML  = html;
 }
+function toggleMobileLB() {
+  const drawer = document.getElementById('mobile-lb-drawer');
+  drawer.classList.toggle('open');
+}
+
 
 function showLeaderboard() {
   loadLeaderboard();
@@ -166,21 +179,38 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
 
-// Mobile touch controls
-let touchStartX = null;
-canvas.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
-canvas.addEventListener('touchmove', e => {
-  if (!touchStartX) return;
-  const dx = e.touches[0].clientX - touchStartX;
-  if (dx > 10)      { keys['ArrowRight'] = true; keys['ArrowLeft'] = false; }
-  else if (dx < -10) { keys['ArrowLeft'] = true; keys['ArrowRight'] = false; }
-  touchStartX = e.touches[0].clientX;
-}, { passive: true });
-canvas.addEventListener('touchend', () => {
+// ── Mobile button controls ────────────────────────────────
+// Called from HTML ontouchstart/ontouchend on the control buttons
+let mobileFireInterval = null;
+
+function mobileKey(dir, pressed) {
+  if (dir === 'left')  keys['ArrowLeft']  = pressed;
+  if (dir === 'right') keys['ArrowRight'] = pressed;
+}
+
+function mobileFire(pressed) {
+  if (pressed) {
+    // fire immediately then repeat while held
+    if (player && gState === 'playing') player.shoot();
+    mobileFireInterval = setInterval(() => {
+      if (player && gState === 'playing') player.shoot();
+    }, 120);
+  } else {
+    clearInterval(mobileFireInterval);
+    mobileFireInterval = null;
+  }
+}
+
+// Safety: release all keys if touch is lost unexpectedly
+window.addEventListener('touchcancel', () => {
   keys['ArrowLeft'] = keys['ArrowRight'] = false;
-  touchStartX = null;
-  if (player && gState === 'playing') player.shoot();
+  clearInterval(mobileFireInterval);
+  mobileFireInterval = null;
 });
+
+// Prevent default touch scrolling / zooming on the game area
+document.getElementById('gameCanvas').addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+document.getElementById('gameCanvas').addEventListener('touchmove',  e => e.preventDefault(), { passive: false });
 
 // ── Canvas sizing ─────────────────────────────────────────
 function initCanvas() {
@@ -673,7 +703,9 @@ async function endGame() {
       document.getElementById('go-rank').textContent =
         `🏆 อันดับที่ ${data.rank} ในอาณาจักร`;
       // Update best score display
-      document.getElementById('player-best').textContent = 'Best: ' + finalScore.toLocaleString();
+      const bestStr = 'Best: ' + finalScore.toLocaleString();
+      document.getElementById('player-best').textContent = bestStr;
+      document.getElementById('mob-best').textContent    = bestStr;
     }
   } catch (err) {
     document.getElementById('go-rank').textContent = 'ไม่สามารถเชื่อมต่อ server';
