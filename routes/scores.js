@@ -1,19 +1,35 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
-const auth = require('../middleware/auth');
+
+// ─────────────────────────────────────────────
+// helper: decode JWT
+// ─────────────────────────────────────────────
+function getUserId(req) {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return null;
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+    return payload.id;
+  } catch {
+    return null;
+  }
+}
 
 // ─────────────────────────────────────────────
 // GET /scores/me
 // ─────────────────────────────────────────────
-router.get('/me', auth, async (req, res) => {
+router.get('/me', async (req, res) => {
+  const userId = getUserId(req);
+  if (!userId) return res.json({ error: 'unauthorized' });
+
   try {
     const [rows] = await db.query(
       `SELECT score 
        FROM scores 
        WHERE user_id = ? 
        ORDER BY score DESC`,
-      [req.user.id]
+      [userId]
     );
     res.json(rows);
   } catch (err) {
@@ -25,7 +41,10 @@ router.get('/me', auth, async (req, res) => {
 // ─────────────────────────────────────────────
 // POST /scores
 // ─────────────────────────────────────────────
-router.post('/', auth, async (req, res) => {
+router.post('/', async (req, res) => {
+  const userId = getUserId(req);
+  if (!userId) return res.json({ error: 'unauthorized' });
+
   try {
     const { score, level } = req.body;
 
@@ -33,21 +52,14 @@ router.post('/', auth, async (req, res) => {
       return res.json({ error: 'invalid score' });
     }
 
-    // บันทึก score
+    // save score
     await db.query(
       `INSERT INTO scores (user_id, score, level)
        VALUES (?, ?, ?)`,
-      [req.user.id, score, level || 1]
+      [userId, score, level || 1]
     );
 
-    // หา best score ของแต่ละคน
-    const [bestRows] = await db.query(
-      `SELECT MAX(score) AS best
-       FROM scores
-       GROUP BY user_id`
-    );
-
-    // หาอันดับ (แก้แล้วใช้ rnk แทน rank)
+    // rank
     const [rankRows] = await db.query(
       `SELECT COUNT(*) + 1 AS rnk
        FROM (
@@ -61,20 +73,19 @@ router.post('/', auth, async (req, res) => {
 
     const playerRank = rankRows[0].rnk;
 
-    // XP (ง่าย ๆ)
+    // XP
     const xpGained = Math.floor(score / 100);
-    
-    // ดึง XP เดิม
+
     const [[user]] = await db.query(
       `SELECT total_xp FROM users WHERE id = ?`,
-      [req.user.id]
+      [userId]
     );
 
-    const newXp = (user.total_xp || 0) + xpGained;
+    const newXp = (user?.total_xp || 0) + xpGained;
 
     await db.query(
       `UPDATE users SET total_xp = ? WHERE id = ?`,
-      [newXp, req.user.id]
+      [newXp, userId]
     );
 
     res.json({
