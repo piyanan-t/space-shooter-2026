@@ -11,21 +11,17 @@
 <body>
 <div id="app">
 
-  <!-- ══════════════════════════════════
-       AUTH SCREEN
-  ═══════════════════════════════════════ -->
+  <!-- ══ AUTH SCREEN ══ -->
   <div id="auth-screen" class="screen active">
     <div class="logo">
       <h1>⚡ Space Shooter</h1>
       <p>Cloud Edition · v1.0</p>
     </div>
-
     <div class="auth-card">
       <div class="auth-tabs">
         <button class="auth-tab active" onclick="switchTab('login')">เข้าสู่ระบบ</button>
         <button class="auth-tab"       onclick="switchTab('register')">สมัครสมาชิก</button>
       </div>
-
       <div id="tab-login">
         <div class="form-group">
           <label>Username</label>
@@ -37,7 +33,6 @@
         </div>
         <button class="btn btn-primary" onclick="doLogin()">▶ เข้าสู่ระบบ</button>
       </div>
-
       <div id="tab-register" style="display:none">
         <div class="form-group">
           <label>Username (3-30 ตัวอักษร)</label>
@@ -49,23 +44,23 @@
         </div>
         <button class="btn btn-primary" onclick="doRegister()">✦ สมัครสมาชิก</button>
       </div>
-
       <div id="auth-msg" class="auth-msg"></div>
     </div>
   </div>
 
-  <!-- ══════════════════════════════════
-       GAME SCREEN
-  ═══════════════════════════════════════ -->
+  <!-- ══ GAME SCREEN ══ -->
   <div id="game-screen" class="screen">
 
-    <!-- ── MOBILE TOP BAR (leaderboard + stats) ── -->
+    <!-- MOBILE TOP BAR -->
     <div class="mobile-topbar" id="mobile-topbar">
       <div class="mobile-topbar-left">
-        <div class="mobile-avatar" id="mob-avatar">?</div>
+        <div class="mobile-avatar" id="mob-avatar" onclick="openAvatarPicker()" title="เปลี่ยน avatar">🚀</div>
         <div>
           <div class="mobile-playername" id="mob-name">—</div>
-          <div class="mobile-best" id="mob-best">Best: 0</div>
+          <div class="mobile-level-row">
+            <span class="mob-level-badge" id="mob-level-badge">LV 1</span>
+            <span class="mob-level-title" id="mob-level-title">Space Cadet</span>
+          </div>
         </div>
       </div>
       <div class="mobile-topbar-right">
@@ -75,7 +70,7 @@
       </div>
     </div>
 
-    <!-- ── MOBILE LEADERBOARD DRAWER ── -->
+    <!-- MOBILE LEADERBOARD DRAWER -->
     <div class="mobile-lb-drawer" id="mobile-lb-drawer">
       <div class="mobile-lb-header">
         <span>🏆 Leaderboard</span>
@@ -86,11 +81,19 @@
       </ul>
     </div>
 
-    <!-- ── DESKTOP SIDEBAR ── -->
+    <!-- DESKTOP SIDEBAR -->
     <aside class="game-sidebar">
+      <!-- Player card -->
       <div class="sidebar-player">
-        <div class="player-avatar" id="player-avatar">?</div>
+        <div class="player-avatar" id="player-avatar" onclick="openAvatarPicker()" title="คลิกเพื่อเปลี่ยน avatar">🚀</div>
         <div class="player-name" id="player-name">—</div>
+
+        <!-- Player Level + XP bar -->
+        <div class="player-level-badge" id="player-level-badge">LV 1 · Space Cadet</div>
+        <div class="xp-bar-wrap">
+          <div class="xp-bar-fill" id="xp-bar-fill" style="width:0%"></div>
+        </div>
+        <div class="xp-text" id="xp-text">0 / 100 XP</div>
         <div class="player-best" id="player-best">Best: 0</div>
       </div>
 
@@ -114,7 +117,7 @@
       </div>
     </aside>
 
-    <!-- ── GAME CANVAS AREA ── -->
+    <!-- GAME CANVAS -->
     <main class="game-main">
       <canvas id="gameCanvas"></canvas>
 
@@ -150,6 +153,14 @@
           <h2 style="color:var(--danger)">☠ GAME OVER</h2>
           <div class="big-score" id="go-score">0</div>
           <p id="go-rank">กำลังบันทึก score...</p>
+          <!-- XP gained popup -->
+          <div class="go-xp-box" id="go-xp-box" style="display:none">
+            <span id="go-xp-gained"></span>
+            <div class="go-xp-bar-wrap">
+              <div class="go-xp-bar-fill" id="go-xp-bar-fill"></div>
+            </div>
+            <span id="go-xp-label"></span>
+          </div>
           <div class="overlay-btns">
             <button class="btn btn-primary" onclick="startGame()">🔄 เล่นใหม่</button>
             <button class="btn btn-ghost"   onclick="showLeaderboard()">🏆 Leaderboard</button>
@@ -169,41 +180,38 @@
       <div class="controls-hint desktop-only">← → เลื่อน · SPACE ยิง · P หยุด</div>
     </main>
 
-    <!-- ── MOBILE JOYSTICK CONTROLS ── -->
+    <!-- MOBILE CONTROLS -->
     <div class="mobile-controls" id="mobile-controls">
       <div class="mob-controls-row">
         <button class="mob-ctrl-btn mob-left"
-          id="btn-left"
-          ontouchstart="mobileKey('left', true)"
-          ontouchend="mobileKey('left', false)"
-          onmousedown="mobileKey('left', true)"
-          onmouseup="mobileKey('left', false)">
-          ◀
-        </button>
-
+          ontouchstart="mobileKey('left',true)" ontouchend="mobileKey('left',false)"
+          onmousedown="mobileKey('left',true)"  onmouseup="mobileKey('left',false)">◀</button>
         <button class="mob-ctrl-btn mob-fire"
-          id="btn-fire"
-          ontouchstart="mobileFire(true)"
-          ontouchend="mobileFire(false)"
-          onmousedown="mobileFire(true)"
-          onmouseup="mobileFire(false)">
-          FIRE
-        </button>
-
+          ontouchstart="mobileFire(true)" ontouchend="mobileFire(false)"
+          onmousedown="mobileFire(true)"  onmouseup="mobileFire(false)">FIRE</button>
         <button class="mob-ctrl-btn mob-right"
-          id="btn-right"
-          ontouchstart="mobileKey('right', true)"
-          ontouchend="mobileKey('right', false)"
-          onmousedown="mobileKey('right', true)"
-          onmouseup="mobileKey('right', false)">
-          ▶
-        </button>
+          ontouchstart="mobileKey('right',true)" ontouchend="mobileKey('right',false)"
+          onmousedown="mobileKey('right',true)"  onmouseup="mobileKey('right',false)">▶</button>
       </div>
     </div>
 
   </div><!-- end #game-screen -->
-</div><!-- end #app -->
 
+  <!-- ══ AVATAR PICKER MODAL ══ -->
+  <div class="modal-backdrop" id="avatar-modal" onclick="closeAvatarPicker(event)">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span>เลือก Avatar</span>
+        <button onclick="closeAvatarPicker()" class="modal-close">✕</button>
+      </div>
+      <div class="avatar-grid" id="avatar-grid">
+        <!-- filled by JS -->
+      </div>
+      <p class="modal-hint">คลิก emoji เพื่อเลือก</p>
+    </div>
+  </div>
+
+</div><!-- end #app -->
 <script src="game.js"></script>
 </body>
 </html>

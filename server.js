@@ -15,6 +15,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/api/auth',        require('./routes/auth'));
 app.use('/api/scores',      require('./routes/scores'));
 app.use('/api/leaderboard', require('./routes/leaderboard'));
+app.use('/api/profile',     require('./routes/profile'));
 
 // ── Catch-all → serve index.html ──────────
 app.get('*', (req, res) => {
