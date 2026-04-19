@@ -1,9 +1,7 @@
 // ════════════════════════════════════════════════════════
-//  game.js — Space Shooter Cloud Edition (FIXED FULL)
+//  game.js — Space Shooter Cloud Edition
+//  Auth + Canvas Game Engine + API integration
 // ════════════════════════════════════════════════════════
-
-// ── SAFE DOM HELPERS ────────────────────────────────────
-const $ = (id) => document.getElementById(id);
 
 // ── API helpers ──────────────────────────────────────────
 const API = {
@@ -29,11 +27,11 @@ const API = {
   }
 };
 
-// ── STATE ───────────────────────────────────────────────
-let currentUser = null;
+// ── Auth & profile state ─────────────────────────────────
+let currentUser   = null;
 let currentAvatar = '🚀';
 
-// ── LEVEL ───────────────────────────────────────────────
+// ── Level helpers ────────────────────────────────────────
 const LEVEL_TITLES = [
   { min: 50, title: '⭐ MAX' },
   { min: 41, title: 'Legend' },
@@ -43,155 +41,642 @@ const LEVEL_TITLES = [
   { min: 6,  title: 'Pilot' },
   { min: 1,  title: 'Space Cadet' },
 ];
-const getLevelTitle = lv => (LEVEL_TITLES.find(t => lv >= t.min) || LEVEL_TITLES.at(-1)).title;
-const calcLevel = xp => Math.min(50, Math.floor(xp / 100) + 1);
-
-// ── CANVAS SAFE INIT ────────────────────────────────────
-let canvas, ctx;
-
-function initCanvas() {
-  canvas = $('gameCanvas');
-  if (!canvas) return;
-  ctx = canvas.getContext('2d');
-  resizeCanvas();
-  window.addEventListener('resize', resizeCanvas);
+function getLevelTitle(lv) {
+  return (LEVEL_TITLES.find(t => lv >= t.min) || LEVEL_TITLES.at(-1)).title;
+}
+function calcLevel(xp) {
+  return Math.min(50, Math.floor(xp / 100) + 1);
 }
 
-function resizeCanvas() {
-  const main = document.querySelector('.game-main');
-  if (!main || !canvas) return;
-  canvas.width = main.clientWidth;
-  canvas.height = main.clientHeight;
+// ── Auth UI ──────────────────────────────────────────────
+function showMsg(msg, type = 'error') {
+  const el = document.getElementById('auth-msg');
+  el.textContent = msg;
+  el.className = 'auth-msg ' + type;
+  setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 4000);
 }
 
-// ── GAME STATE ──────────────────────────────────────────
+function switchTab(tab) {
+  document.getElementById('tab-login').style.display    = tab === 'login'    ? '' : 'none';
+  document.getElementById('tab-register').style.display = tab === 'register' ? '' : 'none';
+  document.querySelectorAll('.auth-tab').forEach((btn, i) => {
+    btn.classList.toggle('active', (i === 0) === (tab === 'login'));
+  });
+}
+
+async function doLogin() {
+  const username = document.getElementById('login-user').value.trim();
+  const password = document.getElementById('login-pass').value;
+  if (!username || !password) return showMsg('กรุณากรอกข้อมูลให้ครบ');
+  showMsg('กำลังเข้าสู่ระบบ...', 'success');
+  const data = await API.post('/auth/login', { username, password });
+  if (data.error) return showMsg(data.error);
+  localStorage.setItem('token', data.token);
+  currentUser = data.username;
+  onLoginSuccess();
+}
+
+async function doRegister() {
+  const username = document.getElementById('reg-user').value.trim();
+  const password = document.getElementById('reg-pass').value;
+  if (!username || !password) return showMsg('กรุณากรอกข้อมูลให้ครบ');
+  showMsg('กำลังสมัครสมาชิก...', 'success');
+  const data = await API.post('/auth/register', { username, password });
+  if (data.error) return showMsg(data.error);
+  localStorage.setItem('token', data.token);
+  currentUser = data.username;
+  onLoginSuccess();
+}
+
+function doLogout() {
+  localStorage.removeItem('token');
+  currentUser = null;
+  showScreen('auth-screen');
+  stopGame();
+}
+
+function onLoginSuccess() {
+  document.getElementById('player-name').textContent = currentUser;
+  document.getElementById('mob-name').textContent    = currentUser;
+  showScreen('game-screen');
+  initCanvas();
+  loadProfile();       // โหลด avatar + XP
+  loadLeaderboard();
+  loadMyBest();
+}
+
+// ── Auto-login ───────────────────────────────────────────
+window.addEventListener('load', async () => {
+  const token = localStorage.getItem('token');
+  if (!token) return;
+  try {
+    const data = await API.get('/scores/me');
+    if (data.error) throw new Error('expired');
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    currentUser = payload.username;
+    onLoginSuccess();
+  } catch {
+    localStorage.removeItem('token');
+  }
+});
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ── Profile: load avatar + XP ────────────────────────────
+async function loadProfile() {
+  try {
+    const data = await API.get('/profile/me');
+    if (data.error) return;
+
+    currentAvatar = data.avatar || '🚀';
+    setAvatarUI(currentAvatar);
+    updateXpUI(data.totalXp || 0);
+  } catch (e) {
+    // ถ้า endpoint ยังไม่มี ใช้ค่า default
+    setAvatarUI('🚀');
+    updateXpUI(0);
+  }
+}
+
+function setAvatarUI(emoji) {
+  document.getElementById('player-avatar').textContent = emoji;
+  document.getElementById('mob-avatar').textContent    = emoji;
+  currentAvatar = emoji;
+}
+
+function updateXpUI(totalXp) {
+  const lv        = calcLevel(totalXp);
+  const xpInLevel = totalXp % 100;
+  const title     = getLevelTitle(lv);
+  const pct       = lv >= 50 ? 100 : xpInLevel;
+
+  // Desktop sidebar
+  document.getElementById('player-level-badge').textContent = `LV ${lv} · ${title}`;
+  document.getElementById('xp-bar-fill').style.width        = pct + '%';
+  document.getElementById('xp-text').textContent            = lv >= 50
+    ? 'MAX LEVEL'
+    : `${xpInLevel} / 100 XP`;
+
+  // Mobile topbar
+  document.getElementById('mob-level-badge').textContent = `LV ${lv}`;
+  document.getElementById('mob-level-title').textContent = title;
+}
+
+async function loadMyBest() {
+  const scores = await API.get('/scores/me');
+  if (Array.isArray(scores) && scores.length > 0) {
+    const bestText = 'Best: ' + scores[0].score.toLocaleString();
+    document.getElementById('player-best').textContent = bestText;
+  }
+}
+
+async function loadLeaderboard() {
+  const data = await API.get('/leaderboard?limit=10');
+  const medals = ['gold', 'silver', 'bronze'];
+
+  const html = !Array.isArray(data) || !data.length
+    ? '<li class="lb-item"><span style="color:var(--muted);font-size:11px">ยังไม่มีข้อมูล</span></li>'
+    : data.map((row, i) => `
+        <li class="lb-item">
+          <span class="lb-rank ${medals[i] || ''}">${i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1)+'.'}</span>
+          <span class="lb-avatar">${row.avatar || '🚀'}</span>
+          <span class="lb-name" title="${row.username}">${row.username}</span>
+          <span class="lb-lv">LV${row.player_level||1}</span>
+          <span class="lb-score">${Number(row.best_score).toLocaleString()}</span>
+        </li>`).join('');
+
+  const desktopUl = document.getElementById('lb-list');
+  const mobileUl  = document.getElementById('mob-lb-list');
+  if (desktopUl) desktopUl.innerHTML = html;
+  if (mobileUl)  mobileUl.innerHTML  = html;
+}
+
+function toggleMobileLB() {
+  document.getElementById('mobile-lb-drawer').classList.toggle('open');
+}
+function showLeaderboard() { loadLeaderboard(); }
+
+// ════════════════════════════════════════════════════════
+//  AVATAR PICKER
+// ════════════════════════════════════════════════════════
+const AVATARS = [
+  '🚀','👾','🛸','⚡','🌟',
+  '💀','🔥','🤖','👽','🦾',
+  '🐉','🦅','🌙','☄️','🎯',
+  '💎','🏆','⚔️','🛡️','🌀'
+];
+
+function openAvatarPicker() {
+  // สร้าง grid ก่อนเปิด
+  const grid = document.getElementById('avatar-grid');
+  grid.innerHTML = AVATARS.map(e => `
+    <button class="avatar-option${e === currentAvatar ? ' selected' : ''}"
+      onclick="selectAvatar('${e}')">${e}</button>
+  `).join('');
+  document.getElementById('avatar-modal').classList.add('open');
+}
+
+function closeAvatarPicker(e) {
+  // ถ้า click ที่ backdrop เอง (ไม่ใช่ modal-card) ปิด
+  if (e && e.target !== document.getElementById('avatar-modal')) return;
+  document.getElementById('avatar-modal').classList.remove('open');
+}
+
+async function selectAvatar(emoji) {
+  try {
+    const data = await API.put('/profile/avatar', { emoji });
+    if (data.error) return alert(data.error);
+    setAvatarUI(emoji);
+    // อัปเดต selected state ใน grid
+    document.querySelectorAll('.avatar-option').forEach(btn => {
+      btn.classList.toggle('selected', btn.textContent === emoji);
+    });
+    setTimeout(() => {
+      document.getElementById('avatar-modal').classList.remove('open');
+    }, 300);
+  } catch {
+    alert('เปลี่ยน avatar ไม่สำเร็จ ลองใหม่อีกครั้ง');
+  }
+}
+
+// ════════════════════════════════════════════════════════
+//  GAME ENGINE
+// ════════════════════════════════════════════════════════
+const canvas = document.getElementById('gameCanvas');
+const ctx    = canvas.getContext('2d');
+
 let gState = 'idle';
 let score = 0, level = 1, lives = 3;
 let animId = null, lastTime = 0;
-
 let player, bullets, enemies, particles, stars, powerups;
+let enemySpawnTimer = 0, enemySpawnRate = 2000;
+let levelUpScore = 500, bossActive = false;
 
-// ── INPUT ───────────────────────────────────────────────
+// ── Input ────────────────────────────────────────────────
 const keys = {};
 window.addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'Space') e.preventDefault();
+  if (e.code === 'KeyP' && gState === 'playing') pauseGame();
+  else if (e.code === 'KeyP' && gState === 'paused') resumeGame();
 });
-window.addEventListener('keyup', e => keys[e.code] = false);
+window.addEventListener('keyup', e => { keys[e.code] = false; });
 
-// ── PLAYER ──────────────────────────────────────────────
+// ── Mobile controls ──────────────────────────────────────
+let mobileFireInterval = null;
+function mobileKey(dir, pressed) {
+  if (dir === 'left')  keys['ArrowLeft']  = pressed;
+  if (dir === 'right') keys['ArrowRight'] = pressed;
+}
+function mobileFire(pressed) {
+  if (pressed) {
+    if (player && gState === 'playing') player.shoot();
+    mobileFireInterval = setInterval(() => {
+      if (player && gState === 'playing') player.shoot();
+    }, 120);
+  } else {
+    clearInterval(mobileFireInterval);
+    mobileFireInterval = null;
+  }
+}
+window.addEventListener('touchcancel', () => {
+  keys['ArrowLeft'] = keys['ArrowRight'] = false;
+  clearInterval(mobileFireInterval);
+  mobileFireInterval = null;
+});
+document.getElementById('gameCanvas').addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+document.getElementById('gameCanvas').addEventListener('touchmove',  e => e.preventDefault(), { passive: false });
+
+// ── Canvas sizing ────────────────────────────────────────
+function initCanvas() {
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+}
+function resizeCanvas() {
+  const main = document.querySelector('.game-main');
+  if (!main) return;
+  canvas.width  = main.clientWidth;
+  canvas.height = main.clientHeight;
+  if (gState === 'idle' || gState === 'over') {
+    stars = createStars(canvas.width, canvas.height);
+    if (gState === 'idle') drawIdleFrame();
+  }
+}
+
+// ── Stars ────────────────────────────────────────────────
+function createStars(w, h) {
+  return Array.from({ length: 120 }, () => ({
+    x: Math.random()*w, y: Math.random()*h,
+    r: Math.random()*1.5+0.3,
+    speed: Math.random()*40+10,
+    alpha: Math.random()*0.7+0.3
+  }));
+}
+function drawStars(dt) {
+  stars.forEach(s => {
+    s.y += s.speed * dt;
+    if (s.y > canvas.height) { s.y = 0; s.x = Math.random()*canvas.width; }
+    ctx.globalAlpha = s.alpha;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI*2); ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+}
+
+// ── Player ───────────────────────────────────────────────
 class Player {
   constructor(x, y) {
     this.x = x; this.y = y;
     this.w = 36; this.h = 44;
     this.speed = 260;
-    this.cooldown = 0;
+    this.shootCooldown = 0;
+    this.shootRate = 300;
+    this.invulnerable = 0;
+    this.trail = [];
   }
-
   update(dt) {
-    if (keys['ArrowLeft']) this.x -= this.speed * dt;
-    if (keys['ArrowRight']) this.x += this.speed * dt;
-
-    this.x = Math.max(20, Math.min(canvas.width - 20, this.x));
-
-    this.cooldown -= dt;
-    if (keys['Space'] && this.cooldown <= 0) {
-      this.shoot();
-      this.cooldown = 0.2;
-    }
+    if (keys['ArrowLeft']  || keys['KeyA']) this.x -= this.speed * dt;
+    if (keys['ArrowRight'] || keys['KeyD']) this.x += this.speed * dt;
+    this.x = Math.max(this.w/2, Math.min(canvas.width - this.w/2, this.x));
+    this.shootCooldown -= dt * 1000;
+    if ((keys['Space'] || keys['ArrowUp']) && this.shootCooldown <= 0) this.shoot();
+    if (this.invulnerable > 0) this.invulnerable -= dt * 1000;
+    this.trail.unshift({ x: this.x, y: this.y + this.h/2, t: 1 });
+    if (this.trail.length > 8) this.trail.pop();
+    this.trail.forEach(p => p.t -= dt * 3);
   }
-
   shoot() {
-    bullets.push({ x: this.x, y: this.y - 20, vy: -500 });
+    if (this.shootCooldown > 0) return;
+    bullets.push(new Bullet(this.x, this.y - this.h/2, 0, -600, '#4f8ef7', true));
+    if (level >= 3) bullets.push(new Bullet(this.x-10, this.y-this.h/3, -80, -580, '#4f8ef7', true));
+    if (level >= 3) bullets.push(new Bullet(this.x+10, this.y-this.h/3,  80, -580, '#4f8ef7', true));
+    if (level >= 6) bullets.push(new Bullet(this.x-20, this.y, -160, -520, '#a855f7', true));
+    if (level >= 6) bullets.push(new Bullet(this.x+20, this.y,  160, -520, '#a855f7', true));
+    this.shootCooldown = Math.max(150, this.shootRate - level * 15);
   }
-
   draw() {
-    ctx.fillStyle = '#4f8ef7';
+    this.trail.forEach(p => {
+      if (p.t <= 0) return;
+      const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 8);
+      grad.addColorStop(0, `rgba(79,142,247,${p.t*0.6})`);
+      grad.addColorStop(1, 'transparent');
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 8, 0, Math.PI*2); ctx.fill();
+    });
+    const alpha = (this.invulnerable > 0 && Math.floor(this.invulnerable/80)%2) ? 0.3 : 1;
+    ctx.globalAlpha = alpha;
+    const x = this.x, y = this.y;
+    ctx.fillStyle = '#1d4ed8';
     ctx.beginPath();
-    ctx.moveTo(this.x, this.y - 20);
-    ctx.lineTo(this.x + 15, this.y + 20);
-    ctx.lineTo(this.x - 15, this.y + 20);
-    ctx.closePath();
-    ctx.fill();
+    ctx.moveTo(x, y-this.h/2); ctx.lineTo(x+this.w/2, y+this.h/2); ctx.lineTo(x-this.w/2, y+this.h/2);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#93c5fd';
+    ctx.beginPath(); ctx.ellipse(x, y-4, 8, 12, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#3b82f6';
+    ctx.beginPath(); ctx.moveTo(x-this.w/2, y+this.h/2); ctx.lineTo(x-this.w/2-12, y+4); ctx.lineTo(x-10, y+8); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(x+this.w/2, y+this.h/2); ctx.lineTo(x+this.w/2+12, y+4); ctx.lineTo(x+10, y+8); ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 1;
   }
+  getBounds() { return { x: this.x-this.w/2, y: this.y-this.h/2, w: this.w, h: this.h }; }
 }
 
-// ── ENEMY ───────────────────────────────────────────────
-class Enemy {
-  constructor(x) {
-    this.x = x;
-    this.y = -20;
-    this.vy = 100;
+// ── Bullet ───────────────────────────────────────────────
+class Bullet {
+  constructor(x, y, vx, vy, color, fromPlayer) {
+    this.x=x; this.y=y; this.vx=vx; this.vy=vy;
+    this.color=color; this.fromPlayer=fromPlayer;
+    this.w=3; this.h=12; this.alive=true;
   }
-
   update(dt) {
-    this.y += this.vy * dt;
+    this.x += this.vx*dt; this.y += this.vy*dt;
+    if (this.y<-20||this.y>canvas.height+20||this.x<-20||this.x>canvas.width+20) this.alive=false;
   }
-
   draw() {
-    ctx.fillStyle = '#ef4444';
-    ctx.fillRect(this.x - 15, this.y - 15, 30, 30);
+    ctx.fillStyle=this.color; ctx.shadowColor=this.color; ctx.shadowBlur=8;
+    ctx.beginPath(); ctx.roundRect(this.x-this.w/2, this.y-this.h/2, this.w, this.h, 2); ctx.fill();
+    ctx.shadowBlur=0;
   }
+  getBounds() { return { x:this.x-this.w/2, y:this.y-this.h/2, w:this.w, h:this.h }; }
 }
 
-// ── GAME LOOP ───────────────────────────────────────────
+// ── Enemy ────────────────────────────────────────────────
+const ENEMY_TYPES = [
+  { color:'#ef4444', hp:1,  score:100,  size:28, speed:80,  shootRate:3000, isBoss:false },
+  { color:'#f97316', hp:2,  score:200,  size:34, speed:60,  shootRate:2000, isBoss:false },
+  { color:'#a855f7', hp:3,  score:350,  size:40, speed:50,  shootRate:1500, isBoss:false },
+  { color:'#ec4899', hp:12, score:2000, size:70, speed:35,  shootRate:800,  isBoss:true  },
+];
+class Enemy {
+  constructor(type, x, y) {
+    Object.assign(this, ENEMY_TYPES[type]);
+    this.type=type; this.x=x; this.y=y;
+    this.maxHp=this.hp; this.shootTimer=Math.random()*this.shootRate;
+    this.alive=true; this.angle=0; this.wobble=Math.random()*Math.PI*2;
+  }
+  update(dt) {
+    this.y += this.speed*dt; this.wobble += dt*1.5;
+    this.x += Math.sin(this.wobble)*(this.isBoss?60:30)*dt;
+    this.x = Math.max(this.size, Math.min(canvas.width-this.size, this.x));
+    this.angle += dt; this.shootTimer -= dt*1000;
+    if (this.shootTimer <= 0) {
+      this.shootTimer = this.shootRate + Math.random()*800;
+      if (player) {
+        const dx=player.x-this.x, dy=player.y-this.y, dist=Math.hypot(dx,dy);
+        const sp=this.isBoss?420:280;
+        bullets.push(new Bullet(this.x, this.y+this.size/2, dx/dist*sp, dy/dist*sp, this.color, false));
+        if (this.isBoss) {
+          bullets.push(new Bullet(this.x-20, this.y+this.size/2, (dx-20)/dist*sp, dy/dist*sp, this.color, false));
+          bullets.push(new Bullet(this.x+20, this.y+this.size/2, (dx+20)/dist*sp, dy/dist*sp, this.color, false));
+        }
+      }
+    }
+    if (this.y > canvas.height+this.size) this.alive=false;
+  }
+  draw() {
+    ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.angle*0.5);
+    ctx.shadowColor=this.color; ctx.shadowBlur=this.isBoss?30:12;
+    ctx.fillStyle=this.color;
+    ctx.beginPath(); ctx.ellipse(0,0,this.size/2,this.size/3.5,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=this.isBoss?'#fff':'#fff6';
+    ctx.beginPath(); ctx.ellipse(0,-this.size/6,this.size/3.5,this.size/4,0,0,Math.PI*2); ctx.fill();
+    if (this.maxHp>1) {
+      const bw=this.size, bh=5, bx=-bw/2, by=this.size/2+6;
+      ctx.fillStyle='#333'; ctx.fillRect(bx,by,bw,bh);
+      ctx.fillStyle=this.color; ctx.fillRect(bx,by,bw*(this.hp/this.maxHp),bh);
+      ctx.shadowBlur=0;
+    }
+    ctx.shadowBlur=0; ctx.restore();
+  }
+  getBounds() { return { x:this.x-this.size/2, y:this.y-this.size/2, w:this.size, h:this.size*0.7 }; }
+}
+
+// ── Particle ─────────────────────────────────────────────
+class Particle {
+  constructor(x,y,color) {
+    this.x=x; this.y=y;
+    this.vx=(Math.random()-.5)*300; this.vy=(Math.random()-.5)*300-80;
+    this.r=Math.random()*4+2; this.color=color; this.life=1; this.decay=Math.random()*2+1;
+  }
+  update(dt) { this.x+=this.vx*dt; this.y+=this.vy*dt; this.vy+=150*dt; this.life-=this.decay*dt; }
+  draw() {
+    ctx.globalAlpha=Math.max(0,this.life); ctx.fillStyle=this.color;
+    ctx.beginPath(); ctx.arc(this.x,this.y,this.r,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha=1;
+  }
+}
+function explode(x,y,color,count=16) {
+  for (let i=0;i<count;i++) particles.push(new Particle(x,y,color));
+}
+
+// ── Powerup ──────────────────────────────────────────────
+class Powerup {
+  constructor(x,y) { this.x=x; this.y=y; this.vy=80; this.alive=true; this.t=0; this.type=Math.random()<.5?'life':'rapid'; }
+  update(dt) { this.y+=this.vy*dt; this.t+=dt; if(this.y>canvas.height+20) this.alive=false; }
+  draw() {
+    const icon=this.type==='life'?'❤':'⚡';
+    ctx.font='22px serif'; ctx.textAlign='center';
+    const bob=Math.sin(this.t*3)*4;
+    ctx.globalAlpha=0.9; ctx.shadowColor=this.type==='life'?'#ef4444':'#fbbf24'; ctx.shadowBlur=16;
+    ctx.fillText(icon,this.x,this.y+bob);
+    ctx.shadowBlur=0; ctx.globalAlpha=1;
+  }
+  getBounds() { return { x:this.x-14,y:this.y-14,w:28,h:28 }; }
+}
+
+// ── Collision ─────────────────────────────────────────────
+function hits(a,b) {
+  const ab=a.getBounds(),bb=b.getBounds();
+  return ab.x<bb.x+bb.w&&ab.x+ab.w>bb.x&&ab.y<bb.y+bb.h&&ab.y+ab.h>bb.y;
+}
+
+// ── HUD update ────────────────────────────────────────────
+function updateHUD() {
+  const hearts='❤'.repeat(lives)+'🖤'.repeat(Math.max(0,3-lives));
+  document.getElementById('hud-score').textContent = score.toLocaleString();
+  document.getElementById('hud-lives').textContent = hearts;
+  document.getElementById('hud-level').textContent = 'LV ' + level;
+  document.getElementById('sb-score').textContent  = score.toLocaleString();
+  document.getElementById('sb-level').textContent  = level;
+  document.getElementById('sb-lives').textContent  = hearts;
+}
+
+// ── Spawn enemy ──────────────────────────────────────────
+function spawnEnemy() {
+  const x=Math.random()*(canvas.width-80)+40;
+  let type;
+  const r=Math.random();
+  if (score>=3000&&!bossActive&&Math.random()<0.05) { type=3; bossActive=true; }
+  else if (level>=5&&r<0.3) type=2;
+  else if (level>=3&&r<0.5) type=1;
+  else type=0;
+  enemies.push(new Enemy(type,x,-40));
+}
+
+// ── Main loop ─────────────────────────────────────────────
 function loop(ts) {
   if (gState !== 'playing') return;
+  const dt=Math.min((ts-lastTime)/1000,0.05);
+  lastTime=ts;
 
-  const dt = (ts - lastTime) / 1000;
-  lastTime = ts;
+  ctx.fillStyle='#05070f'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  drawStars(dt);
 
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  player.update(dt);
-  bullets.forEach(b => b.y += b.vy * dt);
-  enemies.forEach(e => e.update(dt));
-
-  // spawn enemy
-  if (Math.random() < 0.02) {
-    enemies.push(new Enemy(Math.random() * canvas.width));
+  enemySpawnTimer -= dt*1000;
+  if (enemySpawnTimer <= 0) {
+    spawnEnemy();
+    enemySpawnTimer=Math.max(600,enemySpawnRate-level*80);
+  }
+  if (score >= levelUpScore) {
+    level++; levelUpScore=score+500+level*200;
+    enemySpawnRate=Math.max(600,2000-level*100);
   }
 
-  // collision
-  bullets.forEach(b => {
-    enemies.forEach(e => {
-      if (Math.abs(b.x - e.x) < 15 && Math.abs(b.y - e.y) < 15) {
-        e.dead = true;
-        b.dead = true;
-        score += 10;
+  player.update(dt);
+  bullets.forEach(b=>b.update(dt));
+  enemies.forEach(e=>e.update(dt));
+  particles.forEach(p=>p.update(dt));
+  powerups.forEach(p=>p.update(dt));
+
+  // player bullets vs enemies
+  bullets.filter(b=>b.fromPlayer&&b.alive).forEach(b=>{
+    enemies.filter(e=>e.alive).forEach(e=>{
+      if (hits(b,e)) {
+        b.alive=false; e.hp--; explode(b.x,b.y,e.color,6);
+        if (e.hp<=0) {
+          e.alive=false;
+          if(e.isBoss) bossActive=false;
+          explode(e.x,e.y,e.color,e.isBoss?40:16);
+          score+=e.score*level;
+          if(Math.random()<0.15) powerups.push(new Powerup(e.x,e.y));
+        }
       }
     });
   });
 
-  bullets = bullets.filter(b => !b.dead);
-  enemies = enemies.filter(e => !e.dead);
+  // enemy attacks vs player
+  if (player.invulnerable<=0) {
+    bullets.filter(b=>!b.fromPlayer&&b.alive).forEach(b=>{
+      if(hits(b,player)){ b.alive=false; takeDamage(); }
+    });
+    enemies.filter(e=>e.alive).forEach(e=>{
+      if(hits(e,player)){ e.hp=0;e.alive=false;explode(e.x,e.y,e.color,20);if(e.isBoss)bossActive=false;takeDamage(); }
+    });
+  }
 
-  player.draw();
-  bullets.forEach(b => {
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(b.x, b.y, 3, 10);
+  // powerups vs player
+  powerups.filter(p=>p.alive).forEach(p=>{
+    if(hits(p,player)){
+      p.alive=false;
+      if(p.type==='life'&&lives<5){ lives++; explode(p.x,p.y,'#ef4444',10); }
+      else if(p.type==='rapid'){ player.shootRate=Math.max(100,player.shootRate-50); explode(p.x,p.y,'#fbbf24',10); }
+    }
   });
-  enemies.forEach(e => e.draw());
 
-  requestAnimationFrame(loop);
+  bullets   = bullets  .filter(b=>b.alive);
+  enemies   = enemies  .filter(e=>e.alive);
+  particles = particles.filter(p=>p.life>0);
+  powerups  = powerups .filter(p=>p.alive);
+
+  enemies.forEach(e=>e.draw());
+  powerups.forEach(p=>p.draw());
+  bullets.forEach(b=>b.draw());
+  particles.forEach(p=>p.draw());
+  player.draw();
+
+  updateHUD();
+  animId=requestAnimationFrame(loop);
 }
 
-// ── START GAME ──────────────────────────────────────────
+function takeDamage() {
+  lives--; player.invulnerable=2000;
+  explode(player.x,player.y,'#ef4444',20);
+  if(lives<=0) endGame();
+}
+function drawIdleFrame() {
+  ctx.fillStyle='#05070f'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  if(stars) drawStars(0);
+}
+
+// ── Game control ─────────────────────────────────────────
 function startGame() {
-  if (!canvas) initCanvas();
-
-  score = 0;
-  bullets = [];
-  enemies = [];
-  player = new Player(canvas.width / 2, canvas.height - 60);
-
-  gState = 'playing';
-  lastTime = performance.now();
-  requestAnimationFrame(loop);
+  score=0; level=1; lives=3;
+  enemySpawnTimer=1000; enemySpawnRate=2000;
+  levelUpScore=500; bossActive=false;
+  if(!stars) stars=createStars(canvas.width,canvas.height);
+  player=new Player(canvas.width/2, canvas.height-80);
+  bullets=[]; enemies=[]; particles=[]; powerups=[];
+  document.getElementById('overlay-start').style.display   = 'none';
+  document.getElementById('overlay-gameover').style.display = 'none';
+  document.getElementById('overlay-pause').style.display    = 'none';
+  gState='playing'; lastTime=performance.now();
+  animId=requestAnimationFrame(loop);
+  document.getElementById('pause-btn').textContent='⏸ Pause';
+}
+function stopGame()  { gState='idle'; if(animId){ cancelAnimationFrame(animId); animId=null; } }
+function pauseGame() {
+  gState='paused'; cancelAnimationFrame(animId);
+  document.getElementById('overlay-pause').style.display='flex';
+  document.getElementById('pause-btn').textContent='▶ Resume';
+}
+function resumeGame() {
+  document.getElementById('overlay-pause').style.display='none';
+  gState='playing'; lastTime=performance.now();
+  animId=requestAnimationFrame(loop);
+  document.getElementById('pause-btn').textContent='⏸ Pause';
+}
+function toggleGame() {
+  if(gState==='playing') pauseGame();
+  else if(gState==='paused') resumeGame();
 }
 
-// ── AUTO INIT ───────────────────────────────────────────
-window.addEventListener('load', () => {
-  initCanvas();
-});
+// ── End game + XP display ────────────────────────────────
+async function endGame() {
+  gState='over'; cancelAnimationFrame(animId);
+  const finalScore=score;
+
+  document.getElementById('go-score').textContent = finalScore.toLocaleString();
+  document.getElementById('go-rank').textContent  = 'กำลังบันทึก score...';
+  document.getElementById('go-xp-box').style.display = 'none';
+  document.getElementById('overlay-gameover').style.display = 'flex';
+
+  try {
+    const data = await API.post('/scores', { score: finalScore, level });
+    if (data.error) {
+      document.getElementById('go-rank').textContent = 'บันทึกไม่สำเร็จ: ' + data.error;
+    } else {
+      document.getElementById('go-rank').textContent = `🏆 อันดับที่ ${data.rank} ในอาณาจักร`;
+
+      // แสดง XP ที่ได้
+      if (data.xpGained !== undefined) {
+        const lv    = data.playerLevel || calcLevel(data.totalXp || 0);
+        const xpPct = data.xpInLevel !== undefined
+          ? (lv >= 50 ? 100 : data.xpInLevel)
+          : 0;
+        const title = getLevelTitle(lv);
+
+        document.getElementById('go-xp-gained').textContent = `+${data.xpGained} XP`;
+        document.getElementById('go-xp-label').textContent  = `LV ${lv} · ${title}  (${lv>=50?'MAX':data.xpInLevel+'/100'})`;
+        document.getElementById('go-xp-box').style.display  = 'block';
+
+        // animate bar
+        requestAnimationFrame(() => {
+          document.getElementById('go-xp-bar-fill').style.width = xpPct + '%';
+        });
+
+        // อัปเดต sidebar XP bar
+        updateXpUI(data.totalXp || 0);
+      }
+
+      // อัปเดต best score
+      const bestStr = 'Best: ' + finalScore.toLocaleString();
+      document.getElementById('player-best').textContent = bestStr;
+    }
+  } catch {
+    document.getElementById('go-rank').textContent = 'ไม่สามารถเชื่อมต่อ server';
+  }
+
+  loadLeaderboard();
+}
